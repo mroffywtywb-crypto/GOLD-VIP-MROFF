@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOLD MASTER AI</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>GOLD MASTER AI</h1>
+  <span class="badge">DEMO</span>
+</header>
+
+<div class="stats">
+  <div class="stat"><span>موجودی مجازی</span><strong id="balance">$10,000.00</strong></div>
+  <div class="stat"><span>سود/زیان</span><strong id="pnl">$0.00</strong></div>
+  <div class="stat"><span>قیمت XAUUSD</span><strong id="price">—</strong></div>
+  <div class="stat"><span>معاملات</span><strong id="trades-count">0</strong></div>
+</div>
+
+<div class="controls">
+  <button id="start-btn">▶ شروع</button>
+  <button id="stop-btn" disabled>⏹ توقف</button>
+  <span id="status" class="status">WAIT</span>
+</div>
+
+<div id="chart-container"></div>
+
+<h2>گزارش معاملات مجازی</h2>
+<table id="trades-table">
+  <thead>
+    <tr><th>#</th><th>نوع</th><th>ورود</th><th>خروج</th><th>سود/زیان</th><th>وضعیت</th></tr>
+  </thead>
+  <tbody id="trades-body">
+    <tr><td colspan="6" class="empty">هنوز معامله‌ای ثبت نشده</td></tr>
+  </tbody>
+</table>
+
+<footer>GOLD MASTER AI · نسخه آزمایشی 0.1</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
