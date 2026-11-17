@@ -1,3 +1,7 @@
+// ===== تنظیمات =====
+// این نسخه به API نیاز ندارد و با داده شبیه‌سازی‌شده کار می‌کند
+const SYMBOL = 'XAU/USD';
+
 // ===== وضعیت =====
 let running = false;
 let balance = 10000;
@@ -6,6 +10,8 @@ let lastPrice = null;
 let openTrade = null;
 let candles = [];
 let intervalId = null;
+let rowId = 0;
+let basePrice = 2350; // قیمت پایه برای شبیه‌سازی
 
 // ===== عناصر =====
 const $ = id => document.getElementById(id);
@@ -17,7 +23,7 @@ const tradesBody = $('trades-body');
 // ===== چارت =====
 const chart = LightweightCharts.createChart($('chart-container'), {
   width: $('chart-container').clientWidth,
-  height: 380,
+  height: 350,
   layout: { background: { color: '#1e222d' }, textColor: '#d1d4dc' },
   grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
   timeScale: { timeVisible: true },
@@ -29,38 +35,41 @@ const candleSeries = chart.addCandlestickSeries({
 });
 window.addEventListener('resize', () => chart.applyOptions({ width: $('chart-container').clientWidth }));
 
-// ===== دریافت داده تاریخی از Twelve Data (کلید رایگان) =====
-// ⚠️ کلید API خودت رو اینجا بذار (ثبت‌نام رایگان در twelvedata.com)
-const API_KEY = '585071510358411285b9edb19381e49f';
-const SYMBOL = 'XAU/USD';
+// ===== ساخت داده‌های شبیه‌سازی‌شده (بدون API) =====
+function generateMockData(count = 200) {
+  const data = [];
+  let price = basePrice;
+  const now = Math.floor(Date.now() / 1000);
+  const hour = 3600;
 
-async function loadHistory() {
-  const url = `https://api.twelvedata.com/time_series?symbol=${SYMBOL}&interval=1h&outputsize=200&apikey=${API_KEY}`;
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.status === 'error') throw new Error(data.message);
-    candles = data.values.reverse().map(v => ({
-      time: Math.floor(new Date(v.datetime).getTime() / 1000),
-      open: +v.open, high: +v.high, low: +v.low, close: +v.close,
-    }));
-    candleSeries.setData(candles);
-    chart.timeScale().fitContent();
-    lastPrice = candles[candles.length - 1].close;
-    priceEl.textContent = lastPrice.toFixed(2);
-  } catch (e) {
-    console.error('خطا در دریافت داده:', e);
-    alert('خطا در دریافت داده: ' + e.message + '\nکلید API رو چک کن.');
+  for (let i = count; i >= 0; i--) {
+    const time = now - (i * hour);
+    // نوسان تصادفی برای شبیه‌سازی
+    const change = (Math.random() - 0.5) * 8;
+    const open = price;
+    const close = price + change;
+    const high = Math.max(open, close) + Math.random() * 4;
+    const low = Math.min(open, close) - Math.random() * 4;
+    
+    data.push({
+      time: time,
+      open: +open.toFixed(2),
+      high: +high.toFixed(2),
+      low: +low.toFixed(2),
+      close: +close.toFixed(2),
+    });
+    
+    price = close;
   }
+  return data;
 }
 
-// ===== استراتژی ساده: MA crossover =====
+// ===== استراتژی MA =====
 function sma(arr, period) {
   const out = [];
   for (let i = 0; i < arr.length; i++) {
     if (i < period - 1) { out.push(null); continue; }
-    const slice = arr.slice(i - period + 1, i + 1);
-    out.push(slice.reduce((a, b) => a + b, 0) / period);
+    out.push(arr.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
   }
   return out;
 }
@@ -71,10 +80,8 @@ function checkSignal() {
   const fast = sma(closes, 10);
   const slow = sma(closes, 30);
   const i = closes.length - 1;
-  if (fast[i] === null || slow[i] === null || fast[i-1] === null || slow[i-1] === null) return null;
-  // کراس صعودی
+  if (!fast[i] || !slow[i] || !fast[i-1] || !slow[i-1]) return null;
   if (fast[i-1] <= slow[i-1] && fast[i] > slow[i]) return 'buy';
-  // کراس نزولی
   if (fast[i-1] >= slow[i-1] && fast[i] < slow[i]) return 'sell';
   return null;
 }
@@ -82,23 +89,24 @@ function checkSignal() {
 // ===== مدیریت معاملات =====
 function openPosition(type) {
   if (openTrade) return;
-  const price = lastPrice;
-  const sl = type === 'buy' ? price - 5 : price + 5;
-  const tp = type === 'buy' ? price + 10 : price - 10;
-  openTrade = { type, entry: price, sl, tp, time: Date.now() };
-  addTradeRow(openTrade, 'باز');
+  const sl = type === 'buy' ? lastPrice - 5 : lastPrice + 5;
+  const tp = type === 'buy' ? lastPrice + 10 : lastPrice - 10;
+  openTrade = { type, entry: lastPrice, sl, tp, time: Date.now() };
+  addTradeRow(openTrade, 'در جریان...');
 }
 
 function closePosition(reason) {
   if (!openTrade) return;
   const exit = lastPrice;
   const diff = openTrade.type === 'buy' ? exit - openTrade.entry : openTrade.entry - exit;
-  const pnl = diff * 10; // هر ۱ دلار حرکت = ۱۰ دلار سود برای حجم فرضی
+  const pnl = diff * 10;
   balance += pnl;
+  
   openTrade.exit = exit;
   openTrade.pnl = pnl;
   openTrade.reason = reason;
   trades.push(openTrade);
+  
   updateTradeRow(openTrade);
   openTrade = null;
   updateStats();
@@ -106,29 +114,27 @@ function closePosition(reason) {
 
 function manageOpenTrade() {
   if (!openTrade) return;
-  const p = lastPrice;
   if (openTrade.type === 'buy') {
-    if (p <= openTrade.sl) closePosition('SL');
-    else if (p >= openTrade.tp) closePosition('TP');
+    if (lastPrice <= openTrade.sl) closePosition('حد ضرر (SL)');
+    else if (lastPrice >= openTrade.tp) closePosition('حد سود (TP)');
   } else {
-    if (p >= openTrade.sl) closePosition('SL');
-    else if (p <= openTrade.tp) closePosition('TP');
+    if (lastPrice >= openTrade.sl) closePosition('حد ضرر (SL)');
+    else if (lastPrice <= openTrade.tp) closePosition('حد سود (TP)');
   }
 }
 
-// ===== رندر جدول =====
-let rowId = 0;
+// ===== رابط کاربری =====
 function addTradeRow(t, state) {
   const tr = document.createElement('tr');
   tr.id = 'trade-' + (++rowId);
   t._rowId = tr.id;
   tr.innerHTML = `
     <td>${trades.length + 1}</td>
-    <td class="${t.type}">${t.type === 'buy' ? 'خرید' : 'فروش'}</td>
+    <td class="${t.type}">${t.type === 'buy' ? 'خرید 🟢' : 'فروش 🔴'}</td>
     <td>${t.entry.toFixed(2)}</td>
     <td>—</td>
     <td>—</td>
-    <td>${state}</td>`;
+    <td style="color:#f0b90b">${state}</td>`;
   tradesBody.appendChild(tr);
   const empty = tradesBody.querySelector('.empty');
   if (empty) empty.parentElement.remove();
@@ -141,6 +147,7 @@ function updateTradeRow(t) {
   tr.children[4].textContent = (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(2);
   tr.children[4].style.color = t.pnl >= 0 ? '#26a69a' : '#ef5350';
   tr.children[5].textContent = t.reason;
+  tr.children[5].style.color = '#d1d4dc';
 }
 
 function updateStats() {
@@ -151,15 +158,16 @@ function updateStats() {
   tradesCountEl.textContent = trades.length;
 }
 
-// ===== شبیه‌سازی قیمت (چون API رایگان استریم نداره) =====
+// ===== موتور اصلی =====
 function tick() {
   if (!running) return;
-  // نوسان تصادفی ±0.3 دلار حول آخرین قیمت
+  
+  // نوسان قیمت
   const delta = (Math.random() - 0.5) * 0.6;
   lastPrice = +(lastPrice + delta).toFixed(2);
   priceEl.textContent = lastPrice.toFixed(2);
 
-  // کندل جدید هر ۵ ثانیه (شبیه‌سازی)
+  // آپدیت کندل
   const now = Math.floor(Date.now() / 1000);
   const lastCandle = candles[candles.length - 1];
   if (now - lastCandle.time >= 5) {
@@ -180,15 +188,24 @@ function tick() {
   }
 }
 
-// ===== دکمه‌ها =====
-startBtn.onclick = async () => {
-  if (!candles.length) await loadHistory();
-  if (!lastPrice) return alert('داده لود نشد.');
+// ===== رویدادها =====
+startBtn.onclick = () => {
+  if (!candles.length) {
+    // ساخت داده شبیه‌سازی‌شده
+    candles = generateMockData(200);
+    candleSeries.setData(candles);
+    chart.timeScale().fitContent();
+    lastPrice = candles[candles.length - 1].close;
+    priceEl.textContent = lastPrice.toFixed(2);
+  }
+  
   running = true;
   startBtn.disabled = true;
   stopBtn.disabled = false;
   statusEl.textContent = 'RUNNING';
   statusEl.style.color = '#26a69a';
+  
+  if(intervalId) clearInterval(intervalId);
   intervalId = setInterval(tick, 1000);
 };
 
@@ -201,5 +218,9 @@ stopBtn.onclick = () => {
   statusEl.style.color = '#ef5350';
 };
 
-// ===== شروع اولیه =====
-loadHistory();
+// ===== شروع اولیه (چارت با داده شبیه‌سازی‌شده پر می‌شود) =====
+candles = generateMockData(200);
+candleSeries.setData(candles);
+chart.timeScale().fitContent();
+lastPrice = candles[candles.length - 1].close;
+priceEl.textContent = lastPrice.toFixed(2);
