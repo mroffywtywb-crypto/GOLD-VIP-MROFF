@@ -1,5 +1,4 @@
 // ===== تنظیمات =====
-// این نسخه به API نیاز ندارد و با داده شبیه‌سازی‌شده کار می‌کند
 const SYMBOL = 'XAU/USD';
 
 // ===== وضعیت =====
@@ -11,7 +10,6 @@ let openTrade = null;
 let candles = [];
 let intervalId = null;
 let rowId = 0;
-let basePrice = 2350; // قیمت پایه برای شبیه‌سازی
 
 // ===== عناصر =====
 const $ = id => document.getElementById(id);
@@ -35,36 +33,32 @@ const candleSeries = chart.addCandlestickSeries({
 });
 window.addEventListener('resize', () => chart.applyOptions({ width: $('chart-container').clientWidth }));
 
-// ===== ساخت داده‌های شبیه‌سازی‌شده (بدون API) =====
-function generateMockData(count = 200) {
+// ===== ساخت داده‌های اولیه (شبیه‌سازی) =====
+function generateMockData(count = 100) {
   const data = [];
-  let price = basePrice;
+  let price = 2350;
   const now = Math.floor(Date.now() / 1000);
-  const hour = 3600;
-
+  
   for (let i = count; i >= 0; i--) {
-    const time = now - (i * hour);
-    // نوسان تصادفی برای شبیه‌سازی
-    const change = (Math.random() - 0.5) * 8;
+    const change = (Math.random() - 0.5) * 6;
     const open = price;
     const close = price + change;
-    const high = Math.max(open, close) + Math.random() * 4;
-    const low = Math.min(open, close) - Math.random() * 4;
+    const high = Math.max(open, close) + Math.random() * 3;
+    const low = Math.min(open, close) - Math.random() * 3;
     
     data.push({
-      time: time,
+      time: now - (i * 60), // هر کندل ۱ دقیقه
       open: +open.toFixed(2),
       high: +high.toFixed(2),
       low: +low.toFixed(2),
       close: +close.toFixed(2),
     });
-    
     price = close;
   }
   return data;
 }
 
-// ===== استراتژی MA =====
+// ===== استراتژی =====
 function sma(arr, period) {
   const out = [];
   for (let i = 0; i < arr.length; i++) {
@@ -115,15 +109,15 @@ function closePosition(reason) {
 function manageOpenTrade() {
   if (!openTrade) return;
   if (openTrade.type === 'buy') {
-    if (lastPrice <= openTrade.sl) closePosition('حد ضرر (SL)');
-    else if (lastPrice >= openTrade.tp) closePosition('حد سود (TP)');
+    if (lastPrice <= openTrade.sl) closePosition('حد ضرر');
+    else if (lastPrice >= openTrade.tp) closePosition('حد سود');
   } else {
-    if (lastPrice >= openTrade.sl) closePosition('حد ضرر (SL)');
-    else if (lastPrice <= openTrade.tp) closePosition('حد سود (TP)');
+    if (lastPrice >= openTrade.sl) closePosition('حد ضرر');
+    else if (lastPrice <= openTrade.tp) closePosition('حد سود');
   }
 }
 
-// ===== رابط کاربری =====
+// ===== جدول =====
 function addTradeRow(t, state) {
   const tr = document.createElement('tr');
   tr.id = 'trade-' + (++rowId);
@@ -163,14 +157,15 @@ function tick() {
   if (!running) return;
   
   // نوسان قیمت
-  const delta = (Math.random() - 0.5) * 0.6;
+  const delta = (Math.random() - 0.5) * 2;
   lastPrice = +(lastPrice + delta).toFixed(2);
   priceEl.textContent = lastPrice.toFixed(2);
 
   // آپدیت کندل
   const now = Math.floor(Date.now() / 1000);
   const lastCandle = candles[candles.length - 1];
-  if (now - lastCandle.time >= 5) {
+  
+  if (now - lastCandle.time >= 10) {
     const newCandle = { time: now, open: lastPrice, high: lastPrice, low: lastPrice, close: lastPrice };
     candles.push(newCandle);
     candleSeries.update(newCandle);
@@ -190,15 +185,6 @@ function tick() {
 
 // ===== رویدادها =====
 startBtn.onclick = () => {
-  if (!candles.length) {
-    // ساخت داده شبیه‌سازی‌شده
-    candles = generateMockData(200);
-    candleSeries.setData(candles);
-    chart.timeScale().fitContent();
-    lastPrice = candles[candles.length - 1].close;
-    priceEl.textContent = lastPrice.toFixed(2);
-  }
-  
   running = true;
   startBtn.disabled = true;
   stopBtn.disabled = false;
@@ -218,8 +204,9 @@ stopBtn.onclick = () => {
   statusEl.style.color = '#ef5350';
 };
 
-// ===== شروع اولیه (چارت با داده شبیه‌سازی‌شده پر می‌شود) =====
-candles = generateMockData(200);
+// ===== شروع اولیه =====
+// ساخت اولیه چارت با داده‌های ساختگی
+candles = generateMockData(100);
 candleSeries.setData(candles);
 chart.timeScale().fitContent();
 lastPrice = candles[candles.length - 1].close;
